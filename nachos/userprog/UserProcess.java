@@ -27,6 +27,7 @@ public class UserProcess {
 	pageTable = new TranslationEntry[numPhysPages];
 	for (int i=0; i<numPhysPages; i++)
 	    pageTable[i] = new TranslationEntry(i,i, true,false,false,false);
+	
     }
     
     /**
@@ -345,7 +346,88 @@ public class UserProcess {
 	Lib.assertNotReached("Machine.halt() did not halt machine!");
 	return 0;
     }
+    
+    private int handleWrite(int handle, int buffer, int size) {
+    	if(handle < 0 || handle > 15) {
+    		Lib.debug(dbgProcess, "handle out of range");
+    		return -1;
+    	}
+    	if(size < 0) {
+    		Lib.debug(dbgProcess, "negative size");
+    		return -1;
+    	}
+    	else if(size == 0) {
+    		Lib.debug(dbgProcess, "size is zero");
+    		return 0;
+    	}
+    	OpenFile file;
+    	if(descriptors[handle]==null){
+			Lib.debug(dbgProcess, "handleWrite:File doesn't exist in the descriptor table");
+			return -1;
+		}else{
+			file=descriptors[handle];
+		}
 
+    	int length = 0;
+    	byte[] writer = new byte[size];
+    	length = readVirtualMemory(buffer, writer, 0, size);
+    	int count =0;
+    	count = file.write(writer, 0, length);
+    	if (count == -1) {
+    		Lib.debug(dbgProcess, "handleWrite error");
+    		return -1;
+    	}
+    	return count;
+    }
+
+    private int handleClose(int handle){
+		if(handle<0||handle>15){
+			Lib.debug(dbgProcess, "handle out of range");
+			return -1;
+		}
+		if(descriptors[handle]==null){
+			Lib.debug(dbgProcess, "handleClose error");
+			return -1;
+		}else{
+			descriptors[handle].close();
+			descriptors[handle]=null;
+		}
+		return 0;
+	}
+
+	private int handleUnlink(int vaddr){
+		if(vaddr<0){
+			Lib.debug(dbgProcess, "Invalid virtual address");
+			return -1;
+		}
+		String fileName=readVirtualMemoryString(vaddr,256);
+		if(fileName==null){
+			Lib.debug(dbgProcess, "handleUnlink error");
+			return -1;
+		}
+		OpenFile file;
+		int index = -1;
+		for(int i = 0;i < 16; i++){
+			file = descriptors[i];
+			if(file != null && file.getName().compareTo(fileName)== 0){
+				index = i;
+				break;
+			}
+		}	
+		if(index !=-1){
+			Lib.debug(dbgProcess, "File not closed");
+			return -1;
+		}
+		boolean remove = ThreadedKernel.fileSystem.remove(fileName);
+		if(!remove){
+			Lib.debug(dbgProcess, "Remove failed");
+			return -1;
+		}
+
+		return 0;
+
+
+	}
 
     private static final int
         syscallHalt = 0,
@@ -391,7 +473,16 @@ public class UserProcess {
 	switch (syscall) {
 	case syscallHalt:
 	    return handleHalt();
-
+	    
+	case syscallWrite:
+		return handleWrite(a0, a1, a2);
+	
+	case syscallClose:
+		return handleClose(a0);
+		
+	case syscallUnlink:
+		return handleUnlink(a0);
+	
 
 	default:
 	    Lib.debug(dbgProcess, "Unknown syscall " + syscall);
@@ -446,4 +537,8 @@ public class UserProcess {
 	
     private static final int pageSize = Processor.pageSize;
     private static final char dbgProcess = 'a';
+    
+    protected OpenFile[] descriptors;
+    
+    
 }
