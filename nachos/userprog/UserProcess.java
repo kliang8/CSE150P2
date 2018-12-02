@@ -539,6 +539,35 @@ public class UserProcess {
     private static final char dbgProcess = 'a';
     
     protected OpenFile[] descriptors;
-    
-    
+	
+	protected int PID;
+
+	/** The value which this process returns. */
+	protected int status;
+
+	protected Semaphore finished;
+
+	protected HashSet<Integer> childProcesses;
+
+	protected DescriptorManager descriptorManager;
+	
+	protected boolean exitNormally = true;
+
+	protected static final int maxFileDescriptorNum = 16;
+
+	/** All of the opening files and how many processes refer to them */
+	protected static Hashtable<String, Integer> files = new Hashtable<String, Integer>();
+
+	/** The files are going to be deleted */
+	protected static HashSet<String> deleted = new HashSet<String>();
+
+	protected static final int pageSize = Processor.pageSize;
+	protected static final char dbgProcess = 'a';
+	protected static final int maxFileNameLength = 256;
+
+	protected static int processNumber = 0;
+
+	protected static Hashtable<Integer, UserProcess> allProcesses = new Hashtable<Integer, UserProcess>();
+	protected static Hashtable<Integer, UserProcess> diedProcesses = new Hashtable<Integer, UserProcess>();	
+	
 }
