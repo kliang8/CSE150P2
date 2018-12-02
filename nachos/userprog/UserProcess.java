@@ -310,7 +310,15 @@ public class UserProcess {
     /**
      * Release any resources allocated by <tt>loadSections()</tt>.
      */
+	
+    //Free the memory
     protected void unloadSections() {
+	coff.close();
+		
+		for (int i = 0; i < numPages; i++)
+			UserKernel.releasePage(pageTable[i].ppn);
+		pageTable = null;	    
+	    
     }    
 
     /**
