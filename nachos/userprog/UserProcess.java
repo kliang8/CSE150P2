@@ -130,35 +130,40 @@ public class UserProcess {
      *			the array.
      * @return	the number of bytes successfully transferred.
      */
-    public int readVirtualMemory(int vaddr, byte[] data, int offset, int length) {
-	Lib.assertTrue(offset >= 0 && length >= 0 && offset+length <= data.length);
+	public int readVirtualMemory(int vaddr, byte[] data, int offset, int length) {
+		Lib.assertTrue(offset >= 0 && length >= 0
+				&& offset + length <= data.length);
 
-	// Memory to be read
-	byte[] memory = Machine.processor().getMemory();
+		byte[] memory = Machine.processor().getMemory();
 
-	// amount: number of bytes successfully copied
-	// vp: virtual page number
-	int amount, vp, paddr;
+		int firstVPN = Processor.pageFromAddress(vaddr), firstOffset = Processor
+				.offsetFromAddress(vaddr), lastVPN = Processor
+				.pageFromAddress(vaddr + length);
 
-	for (amount = 0; amount < length; amount++) {
-		// Getting virtual page number from the processor
-		vp = Machine.processor().pageFromAddress(vaddr + amount);
+		TranslationEntry entry = getTranslationEntry(firstVPN, false);
 
-		// Making surer we have no negative or more pages than the total number of pages
-		if (vp < 0 || virtPageNum >= numPages)
-			break;
+		if (entry == null)
+			return 0;
 
-		// Translating the read byte address
-		paddr = translate(vaddr + amount);
-		if (paddr < 0)
-			break;
+		int amount = Math.min(length, pageSize - firstOffset);
+		System.arraycopy(memory, Processor.makeAddress(entry.ppn, firstOffset),
+				data, offset, amount);
+		offset += amount;
 
-		// Copying into the designated array
-		System.arraycopy(memory, paddr, data, offset + amount, 1);
-		pageTable[vp].used = true;
+		for (int i = firstVPN + 1; i <= lastVPN; i++) {
+			entry = getTranslationEntry(i, false);
+			if (entry == null)
+				return amount;
+			int len = Math.min(length - amount, pageSize);
+			System.arraycopy(memory, Processor.makeAddress(entry.ppn, 0), data,
+					offset, len);
+			offset += len;
+			amount += len;
+		}
+
+		return amount;
 	}
 
-	return amount;
 
 	// Lib.assertTrue(offset >= 0 && length >= 0 && offset+length <= data.length);
 	//
@@ -172,7 +177,7 @@ public class UserProcess {
 	// System.arraycopy(memory, vaddr, data, offset, amount);
 	//
 	// return amount;
-    }
+ 
 
     /**
      * Transfer all data from the specified array to this process's virtual
@@ -201,22 +206,53 @@ public class UserProcess {
      *			virtual memory.
      * @return	the number of bytes successfully transferred.
      */
-    public int writeVirtualMemory(int vaddr, byte[] data, int offset,
-				  int length) {
-	Lib.assertTrue(offset >= 0 && length >= 0 && offset+length <= data.length);
+	public int writeVirtualMemory(int vaddr, byte[] data, int offset, int length) {
+		Lib.assertTrue(offset >= 0 && length >= 0
+				&& offset + length <= data.length);
 
-	byte[] memory = Machine.processor().getMemory();
+		byte[] memory = Machine.processor().getMemory();
 
-	// for now, just assume that virtual addresses equal physical addresses
-	if (vaddr < 0 || vaddr >= memory.length)
-	    return 0;
+		int firstVPN = Processor.pageFromAddress(vaddr), firstOffset = Processor
+				.offsetFromAddress(vaddr), lastVPN = Processor
+				.pageFromAddress(vaddr + length);
 
-	int amount = Math.min(length, memory.length-vaddr);
-	System.arraycopy(data, offset, memory, vaddr, amount);
+		TranslationEntry entry = getTranslationEntry(firstVPN, true);
 
-	return amount;
-    }
+		if (entry == null)
+			return 0;
 
+		int amount = Math.min(length, pageSize - firstOffset);
+		System.arraycopy(data, offset, memory, Processor.makeAddress(entry.ppn,
+				firstOffset), amount);
+		offset += amount;
+
+		for (int i = firstVPN + 1; i <= lastVPN; i++) {
+			entry = getTranslationEntry(i, true);
+			if (entry == null)
+				return amount;
+			int len = Math.min(length - amount, pageSize);
+			System.arraycopy(data, offset, memory, Processor.makeAddress(
+					entry.ppn, 0), len);
+			offset += len;
+			amount += len;
+		}
+
+		return amount;
+	}
+	
+	protected TranslationEntry getTranslationEntry(int vpn, boolean isWrite) {
+		if (vpn < 0 || vpn >= numPages)
+			return null;
+		TranslationEntry result = pageTable[vpn];
+		if (result == null)
+			return null;
+		if (result.readOnly && isWrite)
+			return null;
+		result.used = true;
+		if (isWrite)
+			result.dirty = true;
+		return result;
+	}
     /**
      * Load the executable with the specified name into this process, and
      * prepare to pass it the specified arguments. Opens the executable, reads
