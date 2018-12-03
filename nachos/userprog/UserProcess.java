@@ -2,10 +2,14 @@ package nachos.userprog;
 
 import nachos.machine.*;
 import nachos.threads.*;
+import nachos.userprog.*;
+
+import java.util.Hashtable;
+
+import java.util.HashSet;
 
 import java.io.EOFException;
-import java.util.HashSet;
-import java.util.Hashtable;
+
 /**
  * Encapsulates the state of a user process that is not contained in its
  * user thread (or threads). This includes its address translation state, a
@@ -566,6 +570,14 @@ public class UserProcess {
 
 	case syscallUnlink:
 		return handleUnlink(a0);
+		
+	case syscallExit:
+			return handleExit(a0);
+		case syscallExec:
+			return handleExec(a0, a1, a2);
+		case syscallJoin:
+			return handleJoin(a0, a1);
+		
 
 
 	default:
@@ -801,8 +813,7 @@ public class UserProcess {
 	/** The files are going to be deleted */
 	protected static HashSet<String> deleted = new HashSet<String>();
 
-	protected static final int pageSize = Processor.pageSize;
-	protected static final char dbgProcess = 'a';
+	
 	protected static final int maxFileNameLength = 256;
 
 	protected static int processNumber = 0;
