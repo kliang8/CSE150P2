@@ -22,14 +22,16 @@ public class UserProcess {
     /**
      * Allocate a new process.
      */
-    public UserProcess() {
-	int numPhysPages = Machine.processor().getNumPhysPages();
-	pageTable = new TranslationEntry[numPhysPages];
-	for (int i=0; i<numPhysPages; i++)
-	    pageTable[i] = new TranslationEntry(i,i, true,false,false,false);
-
-    }
-
+	public UserProcess() {
+		PID = processNumber++;
+		status = -1;
+		allProcesses.put(PID, this);
+		childProcesses = new HashSet<Integer>();
+		finished = new Semaphore(0);
+		descriptorManager = new DescriptorManager();
+		descriptorManager.add(0, UserKernel.console.openForReading());
+		descriptorManager.add(1, UserKernel.console.openForWriting());
+	}
     /**
      * Allocate and return a new process of the correct class. The class name
      * is specified by the <tt>nachos.conf</tt> key
@@ -94,7 +96,7 @@ public class UserProcess {
 
 	int bytesRead = readVirtualMemory(vaddr, bytes);
 
-	for (int length=0; length<bytesRead; length++) {
+	for (int length = 0; length < bytesRead; length ++) {
 	    if (bytes[length] == 0)
 		return new String(bytes, 0, length);
 	}
@@ -311,34 +313,52 @@ public class UserProcess {
      * @return	<tt>true</tt> if the sections were successfully loaded.
      */
     protected boolean loadSections() {
-	if (numPages > Machine.processor().getNumPhysPages()) {
-	    coff.close();
-	    Lib.debug(dbgProcess, "\tinsufficient physical memory");
-	    return false;
+		// physical page numbers allocated
+		int[] ppns = UserKernel.allocatePages(numPages);
+
+		if (ppns == null) {
+			coff.close();
+			Lib.debug(dbgProcess, "\tinsufficient physical memory");
+			return false;
+		}
+
+		pageTable = new TranslationEntry[numPages];
+
+		// load sections
+		// the sections are contiguous and start at page 0
+		for (int s = 0; s < coff.getNumSections(); s++) {
+			CoffSection section = coff.getSection(s);
+
+			Lib.debug(dbgProcess, "\tinitializing " + section.getName()
+					+ " section (" + section.getLength() + " pages)");
+
+			for (int i = 0; i < section.getLength(); i++) {
+				int vpn = section.getFirstVPN() + i;
+				int ppn = ppns[vpn];
+				pageTable[vpn] = new TranslationEntry(vpn, ppn, true, section
+						.isReadOnly(), false, false);
+				section.loadPage(i, ppn);
+			}
+		}
+
+		// allocate free pages for stack and argv
+		for (int i = numPages - stackPages - 1; i < numPages; i++) {
+			pageTable[i] = new TranslationEntry(i, ppns[i], true, false, false,
+					false);
+		}
+
+		return true;
 	}
-
-	// load sections
-	for (int s=0; s<coff.getNumSections(); s++) {
-	    CoffSection section = coff.getSection(s);
-
-	    Lib.debug(dbgProcess, "\tinitializing " + section.getName()
-		      + " section (" + section.getLength() + " pages)");
-
-	    for (int i=0; i<section.getLength(); i++) {
-		int vpn = section.getFirstVPN()+i;
-
-		// for now, just assume virtual addresses=physical addresses
-		section.loadPage(i, vpn);
-	    }
-	}
-
-	return true;
-    }
 
     /**
      * Release any resources allocated by <tt>loadSections()</tt>.
      */
     protected void unloadSections() {
+		coff.close();
+		
+		for (int i = 0; i < numPages; i++)
+			UserKernel.releasePage(pageTable[i].ppn);
+		pageTable = null;	    
     }
 
     /**
@@ -518,7 +538,163 @@ public class UserProcess {
 	}
 	return 0;
     }
+	
+	
+	protected int handleJoin(int processID, int status) {
+		if (!childProcesses.contains(processID)) {
+			Lib
+					.debug(dbgProcess,
+							"processID does not refer to a child process of current process");
+			return -1;
+		}
 
+		childProcesses.remove(processID);
+
+		UserProcess child = allProcesses.get(processID);
+
+		if (child == null) {
+			Lib.debug(dbgProcess, "join a exited process");
+			child = diedProcesses.get(processID);
+			if (child == null) {
+				Lib.debug(dbgProcess, "error in join");
+				return -1;
+			}
+		}
+
+		child.finished.P();
+
+		writeVirtualMemory(status, Lib.bytesFromInt(child.status));
+
+		if (child.exitNormally)
+			return 1;
+		else
+			return 0;
+	}
+	
+	protected int handleExec(int file, int argc, int argv) {
+		String fileName = readVirtualMemoryString(file, maxFileNameLength);
+		
+		if (fileName == null || !fileName.endsWith(".coff")) {
+			Lib.debug(dbgProcess, "Invalid file name in handleExec()");
+			return -1;
+		}
+		
+		if (argc < 0) {
+			Lib.debug(dbgProcess, "argc < 0");
+			return -1;
+		}
+		
+		String[] args = new String[argc];
+		byte[] buffer = new byte[4];
+		
+		for (int i = 0; i < argc; i++) {
+			if (readVirtualMemory(argv + i * 4, buffer) != 4)
+				return -1;
+			args[i] = readVirtualMemoryString(Lib.bytesToInt(buffer, 0),
+				maxFileNameLength);
+			if (args[i] == null)
+				return -1;
+		}
+		
+		UserProcess child = newUserProcess();
+		childProcesses.add(child.PID);
+		
+		saveState();
+		
+		if (!child.execute(fileName, args)) {
+			Lib.debug(dbgProcess, "fail to execute child process");
+			return -1;
+		}
+		return child.PID;
+	}
+	
+	
+	
+	protected int handleExit(int status) {
+		this.status = status;
+		
+		for (int i = 2; i < maxFileDescriptorNum; i++)
+			descriptorManager.close(i);
+
+		unloadSections();
+
+		allProcesses.remove(PID);
+		diedProcesses.put(PID, this);
+
+		finished.V();
+
+		if (allProcesses.isEmpty())
+			Kernel.kernel.terminate();
+
+		UThread.finish();
+
+		return 0;
+	}	
+
+	
+	public class DescriptorManager {
+		public OpenFile descriptor[] = new OpenFile[maxFileDescriptorNum];
+
+		public int add(int index, OpenFile file) {
+			if (index < 0 || index >= maxFileDescriptorNum)
+				return -1;
+
+			if (descriptor[index] == null) {
+				descriptor[index] = file;
+				if (files.get(file.getName()) != null) {
+					files.put(file.getName(), files.get(file.getName()) + 1);
+				}
+				else {
+					files.put(file.getName(), 1);
+				}
+				return index;
+			}
+
+			return -1;
+		}
+
+		public int add(OpenFile file) {
+			for (int i = 0; i < maxFileDescriptorNum; i++)
+				if (descriptor[i] == null)
+					return add(i, file);
+
+			return -1;
+		}
+
+		public int close(int fileDescriptor) {
+			if (descriptor[fileDescriptor] == null) {
+				Lib.debug(dbgProcess, "file descriptor " + fileDescriptor
+						+ " doesn't exist");
+				return -1;
+			}
+
+			OpenFile file = descriptor[fileDescriptor];
+			descriptor[fileDescriptor] = null;
+			file.close();
+
+			String fileName = file.getName();
+
+			if (files.get(fileName) > 1)
+				files.put(fileName, files.get(fileName) - 1);
+			else {
+				files.remove(fileName);
+				if (deleted.contains(fileName)) {
+					deleted.remove(fileName);
+					UserKernel.fileSystem.remove(fileName);
+				}
+			}
+
+			return 0;
+		}
+
+		public OpenFile get(int fileDescriptor) {
+			if (fileDescriptor < 0 || fileDescriptor >= maxFileDescriptorNum)
+				return null;
+			return descriptor[fileDescriptor];
+		}
+	}
+	
+	
     /**
      * Handle a user exception. Called by
      * <tt>UserKernel.exceptionHandler()</tt>. The
