@@ -386,6 +386,57 @@ public class LotteryScheduler extends PriorityScheduler {
 		public LotteryThreadState(KThread thread) {
 			super(thread);
 		}
+		
+		@Override
+		public int getEffectivePriority() {
+		    // implement me
+			if(threadQueue == null) {
+				return priority;
+			}	
+			// If the queue is empty or only has 1 thread, return the original priority value
+			if (threadQueue.waitQueue.isEmpty()) {
+				return priority;
+			}
+			
+			
+			int ticketSum = this.priority;
+			for (int i = 0; i < ownedQueues.size(); i++) {
+				int ownedWaitingQueueSize = ownedQueues.get(i).waitQueue.size();
+				int KticketSum = 0;
+				for (int j = 0; j < ownedWaitingQueueSize; j++) {
+					KticketSum += getThreadState(ownedQueues.get(i).waitQueue.get(j)).priority;
+							
+							
+				}
+				ticketSum += KticketSum;
+				
+				
+				
+			}
+			priority = ticketSum;
+			
+			return priority;
+			
+			
+			/*
+			 for (int j = 0; j < ownedQueueSize; j++) {
+						int ownedWaitingQueueSize = (((getThreadState(waitQueue.get(i))).ownedQueues).get(j)).waitQueue
+								.size();
+						int KticketSum = 0;
+						for (int k = 0; k < ownedWaitingQueueSize; k++) {
+							KticketSum += getThreadState(
+									(((getThreadState(waitQueue.get(i))).ownedQueues).get(j).waitQueue
+											.get(k))).priority;
+						}
+						ticketCount += KticketSum;
+					}
+					ticketSum[i] = ticketCount;
+			  
+			  
+			 */
+			
+			
+		}
 
 		@Override
 		public void waitForAccess(PriorityQueue waitQueue) {
