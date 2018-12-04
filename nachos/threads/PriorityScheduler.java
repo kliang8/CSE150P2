@@ -1,423 +1,355 @@
 package nachos.threads;
 
 import nachos.machine.*;
-//import nachos.threads.KThread.PingTest;
-import nachos.threads.PriorityScheduler.PriorityQueue;
-import nachos.threads.PriorityScheduler.ThreadState;
-
-import java.util.TreeSet;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
+import java.util.*;
 
 /**
- * A scheduler that chooses threads using a lottery.
+ * A scheduler that chooses threads based on their priorities.
  *
  * <p>
- * A lottery scheduler associates a number of tickets with each thread. When a
- * thread needs to be dequeued, a random lottery is held, among all the tickets
- * of all the threads waiting to be dequeued. The thread that holds the winning
- * ticket is chosen.
+ * A priority scheduler associates a priority with each thread. The next thread
+ * to be dequeued is always a thread with priority no less than any other
+ * waiting thread's priority. Like a round-robin scheduler, the thread that is
+ * dequeued is, among all the threads of the same (highest) priority, the
+ * thread that has been waiting longest.
  *
  * <p>
- * Note that a lottery scheduler must be able to handle a lot of tickets
- * (sometimes billions), so it is not acceptable to maintain state for every
- * ticket.
+ * Essentially, a priority scheduler gives access in a round-robin fassion to
+ * all the highest-priority threads, and ignores all other threads. This has
+ * the potential to
+ * starve a thread if there's always a thread waiting with higher priority.
  *
  * <p>
- * A lottery scheduler must partially solve the priority inversion problem; in
- * particular, tickets must be transferred through locks, and through joins.
- * Unlike a priority scheduler, these tickets add (as opposed to just taking the
- * maximum).
+ * A priority scheduler must partially solve the priority inversion problem; in
+ * particular, priority must be donated through locks, and through joins.
  */
-public class LotteryScheduler extends PriorityScheduler {
+public class PriorityScheduler extends Scheduler {
+    /**
+     * Allocate a new priority scheduler.
+     */
+    public PriorityScheduler() {
+    }
+    
+    /**
+     * Allocate a new priority thread queue.
+     *
+     * @param	transferPriority	<tt>true</tt> if this queue should
+     *					transfer priority from waiting threads
+     *					to the owning thread.
+     * @return	a new priority thread queue.
+     */
+    public ThreadQueue newThreadQueue(boolean transferPriority) {
+	return new PriorityQueue(transferPriority);
+    }
 
-	// Variables
-	public static final int priorityDefault = 1;
-	public static final int priorityMinimum = 1;
-	public static final int priorityMaximum = Integer.MAX_VALUE;
+    public int getPriority(KThread thread) {
+	Lib.assertTrue(Machine.interrupt().disabled());
+		       
+	return getThreadState(thread).getPriority();
+    }
 
-	// Constructor
+    public int getEffectivePriority(KThread thread) {
+	Lib.assertTrue(Machine.interrupt().disabled());
+		       
+	return getThreadState(thread).getEffectivePriority();
+    }
+
+    public void setPriority(KThread thread, int priority) {
+	Lib.assertTrue(Machine.interrupt().disabled());
+		       
+	Lib.assertTrue(priority >= priorityMinimum &&
+		   priority <= priorityMaximum);
+	
+	getThreadState(thread).setPriority(priority);
+    }
+
+    public boolean increasePriority() {
+		boolean intStatus = Machine.interrupt().disable();
+			       
+		KThread thread = KThread.currentThread();
+	
+		int priority = getPriority(thread);
+		if (priority == priorityMaximum)
+		    return false;
+	
+		setPriority(thread, priority+1);
+	
+		Machine.interrupt().restore(intStatus);
+		return true;
+    }
+
+    public boolean decreasePriority() {
+		boolean intStatus = Machine.interrupt().disable();
+			       
+		KThread thread = KThread.currentThread();
+	
+		int priority = getPriority(thread);
+		if (priority == priorityMinimum)
+		    return false;
+	
+		setPriority(thread, priority-1);
+	
+		Machine.interrupt().restore(intStatus);
+		return true;
+    }
+
+    /**
+     * The default priority for a new thread. Do not change this value.
+     */
+    public static final int priorityDefault = 1;
+    /**
+     * The minimum priority that a thread can have. Do not change this value.
+     */
+    public static final int priorityMinimum = 0;
+    /**
+     * The maximum priority that a thread can have. Do not change this value.
+     */
+    public static final int priorityMaximum = 7;    
+
+    /**
+     * Return the scheduling state of the specified thread.
+     *
+     * @param	thread	the thread whose scheduling state to return.
+     * @return	the scheduling state of the specified thread.
+     */
+    protected ThreadState getThreadState(KThread thread) {
+	if (thread.schedulingState == null)
+	    thread.schedulingState = new ThreadState(thread);
+
+	return (ThreadState) thread.schedulingState;
+    }
+    
+    /**
+     * A <tt>ThreadQueue</tt> that sorts threads by priority.
+     */
+    protected class PriorityQueue extends ThreadQueue {
+		PriorityQueue(boolean transferPriority) {
+		    this.transferPriority = transferPriority;
+		}
+	
+		public void waitForAccess(KThread thread) {
+		    Lib.assertTrue(Machine.interrupt().disabled());
+		    getThreadState(thread).waitForAccess(this);
+		}
+	
+		public void acquire(KThread thread) {
+		    Lib.assertTrue(Machine.interrupt().disabled());
+		    getThreadState(thread).acquire(this);
+		}
+		
+		public KThread nextThread() {
+		    Lib.assertTrue(Machine.interrupt().disabled());
+		    // implement me   
+		    if (waitQueue.isEmpty())
+				return null;
+		    // Sort the waitQueue by Effective Priority
+		    sort();
+		    // Return the thread with the highest effective priority
+			return (KThread) waitQueue.removeFirst();
+		}
+	
+		/**
+		 * Return the next thread that <tt>nextThread()</tt> would return,
+		 * without modifying the state of this queue.
+		 *
+		 * @return	the next thread that <tt>nextThread()</tt> would
+		 *		return.
+		 */
+		
+		// Returns next thread without removing from queue
+		protected ThreadState pickNextThread() {
+		    // implement me
+		    if (waitQueue.isEmpty())
+				return null;
+		    // Sort the waitQueue by Effective Priority
+		    sort();
+		    // Return the thread with the highest Effective Priority
+			return  getThreadState((KThread) waitQueue.peekFirst());
+		}
+		
+		public void print() {
+		    Lib.assertTrue(Machine.interrupt().disabled());
+		    // implement me (if you want)
+		}
+	
+		/**
+		 * <tt>true</tt> if this queue should transfer priority from waiting
+		 * threads to the owning thread.
+		 */
+		public boolean transferPriority;
+		
+		// Added Functions
+		
+		// Sort sorts the waitQueue data structure by effective priority
+		// If 2 threads have the same priority, the thread that has been waiting
+		// the longest will be chosen, as in getEffectivePriority, the thread waiting 
+		// the longest will be given higher priority.
+		
+		public void sort() {
+			if (waitQueue.isEmpty()) {
+				return;
+			}
+			// Comparator for sorting waitQueue
+			Collections.sort(waitQueue, new Comparator<KThread>(){
+				 public int compare(KThread o1, KThread o2) {
+					 // Sort threads by highest effective priority (getEffectivePriority factors in waiting time when threads have equal priority)
+					 if (getThreadState(o1).getEffectivePriority() < getThreadState(o2).getEffectivePriority()) {
+						 return 1;
+					 }  else {
+						 return -1;
+					 }
+			     }
+			});
+		}
+		
+		// waitQueue (adapted from RoundRobinScheduler.java)
+		// This is the actual data structure that holds the associated threads
+		protected LinkedList<KThread> waitQueue = new LinkedList<KThread>();
+    }
+    
+    /**
+     * The scheduling state of a thread. This should include the thread's
+     * priority, its effective priority, any objects it owns, and the queue
+     * it's waiting for, if any.
+     *
+     * @see	nachos.threads.KThread#schedulingState
+     */
+    protected class ThreadState {
+	/**
+	 * Allocate a new <tt>ThreadState</tt> object and associate it with the
+	 * specified thread.
+	 *
+	 * @param	thread	the thread this state belongs to.
+	 */
+	public ThreadState(KThread thread) {
+	    this.thread = thread;
+	    setPriority(priorityDefault);
+	}
 
 	/**
-	 * Allocate a new lottery scheduler.
+	 * Return the priority of the associated thread.
+	 *
+	 * @return	the priority of the associated thread.
 	 */
-	public LotteryScheduler() {
+	public int getPriority() {
+	    return priority;
 	}
 
-	// Functions
-
-	@Override
-	public ThreadQueue newThreadQueue(boolean transferPriority) {
-		return new LotteryQueue(transferPriority);
-	}
-
-	@Override
-	protected LotteryThreadState getThreadState(KThread thread) {
-		if (thread.schedulingState == null)
-			thread.schedulingState = new LotteryThreadState(thread);
-
-		return (LotteryThreadState) thread.schedulingState;
-	}
-
-	// Tests
-
-	private static class PingTest implements Runnable {
-		PingTest(int which) {
-			this.which = which;
+	/**
+	 * Return the effective priority of the associated thread.
+	 *
+	 * @return	the effective priority of the associated thread.
+	 */
+	public int getEffectivePriority() {
+	    // implement me
+		if(threadQueue == null) {
+			return priority;
+		}	
+		// If the queue is empty or only has 1 thread, return the original priority value
+		if (threadQueue.waitQueue.isEmpty()) {
+			return priority;
 		}
-
-		public void run() {
-			for (int i = 0; i < 5; i++) {
-				System.out.println("*** thread " + which + " looped " + i + " times");
-				KThread.currentThread().yield();
-			}
-		}
-
-		private int which;
-	}
-
-	public static void selfTest() {
-		selfTest1();
-	}
-
-	public static void selfTest1() {
-
-		System.out.println("Running Self Test");
-		KThread[] threads = new KThread[4];
-		int[] tickets = new int[4];
-
-		tickets[0] = 15;
-		tickets[1] = 30;
-		tickets[2] = 50;
-		tickets[3] = 5;
-
-		LotteryScheduler scheduler = (LotteryScheduler) (ThreadedKernel.scheduler);
-
-		//ThreadQueue tq = scheduler.newThreadQueue(true);
-
-		// Create Threads
-		for (int i = 0; i < 4; i++) {
-			threads[i] = new KThread(new PingTest(i)).setName("threads " + String.valueOf(i) + " ");
-			scheduler.getThreadState(threads[i]).setPriority(tickets[i]);
-		}
-
-		// Fork Threads
-		for (int i = 0; i < 4; i++) {
-			System.out.println("Thread " + i + " forked.");
-			threads[i].fork();
-		}
-
-		// Join Threads
-		//for (int i = 0; i < 4; i++) {
-		//	threads[i].join();
-		//}
-
-		System.out.println("End of Self Test");
-	}
-
-	public static void selfTest2() {
-		System.out.println("Running Self Test");
-		KThread[] threads = new KThread[2];
-		int[] tickets = new int[2];
-
-		tickets[0] = 51;
-		tickets[1] = 49;
-
-		LotteryScheduler scheduler = (LotteryScheduler) (ThreadedKernel.scheduler);
-
-		// Create Threads and Fork Them
-		for (int i = 0; i < 2; i++) {
-			threads[i] = new KThread(new PingTest(i)).setName("threads " + String.valueOf(i) + " ");
-			scheduler.getThreadState(threads[i]).setPriority(tickets[i]);
-			System.out.println("Thread " + i + " forked.");
-			threads[i].fork();
-		}
-
-		// Join Threads
-		for (int i = 0; i < 2; i++) {
-			threads[i].join();
-		}
-
-		System.out.println("End of Self Test");
-	}
-
-	// Lottery Queue
-	protected class LotteryQueue extends PriorityQueue {
-
-		// Variables
-		public LotteryThreadState owner = null;
-
-		public LotteryQueue(boolean transferPriority) {
-			super(transferPriority);
-		}
-
-		public void waitForAccess(KThread thread) {
-			Lib.assertTrue(Machine.interrupt().disabled());
-			getThreadState(thread).waitForAccess(this);
-		}
-
-		public void acquire(KThread thread) {
-			Lib.assertTrue(Machine.interrupt().disabled());
-			getThreadState(thread).acquire(this);
-
-			if (owner != null) {
-
-			} else {
-				owner = (LotteryThreadState) getThreadState(thread);
-			}
-
-		}
-
-		public KThread nextThread() {
-			Lib.assertTrue(Machine.interrupt().disabled());
-			// implement me
-			if (waitQueue.isEmpty())
-				return null;
-
-			if (owner != null) {
-				owner.noLongerOwn(this);
-			}
-			owner = null;
-
-
-			int[] ticketSum = new int[waitQueue.size()];
-
-			// Case 1: priority donation
-			if (transferPriority) {
-
-				// Calculate each threads ticket count, including the tickets from queues owned
-				// by the thread
-				for (int i = 0; i < waitQueue.size(); i++) {
-					int ownedQueueSize = getThreadState(waitQueue.get(i)).ownedQueues.size();
-					int ticketCount = getThreadState(waitQueue.get(i)).getPriority();
-					for (int j = 0; j < ownedQueueSize; j++) {
-						int ownedWaitingQueueSize = (((getThreadState(waitQueue.get(i))).ownedQueues).get(j)).waitQueue
-								.size();
-						int KticketSum = 0;
-						for (int k = 0; k < ownedWaitingQueueSize; k++) {
-							KticketSum += getThreadState(
-									(((getThreadState(waitQueue.get(i))).ownedQueues).get(j).waitQueue
-											.get(k))).priority;
-						}
-						ticketCount += KticketSum;
-					}
-					ticketSum[i] = ticketCount;
+		for(int i = 0; i < threadQueue.waitQueue.size(); i++) {
+			//  If this thread has the same priority as another thread (and they are not the same thread)
+			if (getThreadState(threadQueue.waitQueue.get(i)).priority == this.priority && getThreadState(threadQueue.waitQueue.get(i)).thread != this.thread) {
+				// If this thread's starting wait time is earlier (this thread has been waiting for longer) then return priority + 1
+				if (getThreadState(threadQueue.waitQueue.get(i)).waitStartTime > this.waitStartTime && this.priority != priorityMaximum) {
+					return (this.priority + 1);
 				}
+			}	
+		}
+		return priority;	
+	}
 
-				// Calculate the total number of tickets across all threads
-				int totalTickets = 0;
-				for (int i = 0; i < ticketSum.length; i++) {
-					totalTickets += ticketSum[i];
-				}
+	/**
+	 * Set the priority of the associated thread to the specified value.
+	 *
+	 * @param	priority	the new priority.
+	 */
+	public void setPriority(int priority) {
+	    if (this.priority == priority)
+		return;
+	    
+	    this.priority = priority;
+	    // implement me
+	    // Function does not need additional functionality
+	    // as the re-configuring priority
+	    // is accomplished by the data structure
+	    // and it's sorting
+	}
 
-				// Run the lottery
-				int randomNumber = (int) (Lib.random() * totalTickets);
-				for (int i = 0; i < waitQueue.size(); i++) {
-					randomNumber -= ticketSum[i];
-					if (randomNumber < 0) {
-						return (KThread) waitQueue.remove(i);
+	/**
+	 * Called when <tt>waitForAccess(thread)</tt> (where <tt>thread</tt> is
+	 * the associated thread) is invoked on the specified priority queue.
+	 * The associated thread is therefore waiting for access to the
+	 * resource guarded by <tt>waitQueue</tt>. This method is only called
+	 * if the associated thread cannot immediately obtain access.
+	 *
+	 * @param	waitQueue	the queue that the associated thread is
+	 *				now waiting on.
+	 *
+	 * @see	nachos.threads.ThreadQueue#waitForAccess
+	 */
+	public void waitForAccess(PriorityQueue waitQueue) {
+	    // implement me
+		Lib.assertTrue(Machine.interrupt().disabled());
+		// Add this thread to the PriorityQueue's waitQueue
+		waitQueue.waitQueue.add(thread);
+		// Set the time that the thread was added to the waitQueue
+		waitStartTime = Machine.timer().getTime();
+		// Set this ThreadState's associated PriorityQueue to the waitQueue
+		// that this thread was added to
+		threadQueue = waitQueue;	
+	}
+
+	/**
+	 * Called when the associated thread has acquired access to whatever is
+	 * guarded by <tt>waitQueue</tt>. This can occur either as a result of
+	 * <tt>acquire(thread)</tt> being invoked on <tt>waitQueue</tt> (where
+	 * <tt>thread</tt> is the associated thread), or as a result of
+	 * <tt>nextThread()</tt> being invoked on <tt>waitQueue</tt>.
+	 *
+	 * @see	nachos.threads.ThreadQueue#acquire
+	 * @see	nachos.threads.ThreadQueue#nextThread 
+	 */
+	public void acquire(PriorityQueue waitQueue) {
+		Lib.assertTrue(Machine.interrupt().disabled());
+		// If transfer priority is enabled and this thread has an associated threadQueue
+		if(waitQueue.transferPriority == true && threadQueue != null) {
+			// If the associated Priority Queue's waitQueue is not empty and has at least 2 threads in its waitQueue
+			if (!threadQueue.waitQueue.isEmpty() && threadQueue.waitQueue.size() >= 2 ) {
+				int maxWaitTimeIndex = 0;
+				// Find the thread that has been waiting the longest
+				for(int i = 1; i < threadQueue.waitQueue.size(); i++) {
+					if (getThreadState(threadQueue.waitQueue.get(i)).waitStartTime < getThreadState(threadQueue.waitQueue.get(maxWaitTimeIndex)).waitStartTime) {
+						maxWaitTimeIndex = i;
 					}
 				}
-				
-			// Case 2: no priority donation
-			} else {
-				
-				// Calculate each threads ticket count, WITHOUT ticket donation / priority donation
-				for (int i = 0; i < waitQueue.size(); i++) {
-					ticketSum[i] = getThreadState(waitQueue.get(i)).getPriority();
-				}
-				
-				// Calculate the total number of tickets across all threads
-				int totalTickets = 0;
-				for (int i = 0; i < ticketSum.length; i++) {
-					totalTickets += ticketSum[i];
-				}
-				
-				// Run the lottery
-				int randomNumber = (int) (Lib.random() * totalTickets);
-				for (int i = 0; i < waitQueue.size(); i++) {
-					randomNumber -= ticketSum[i];
-					if (randomNumber < 0) {
-						return (KThread) waitQueue.remove(i);
-					}
-				}
-				
+				// Donate priority to the longest waiting thread
+				if (getThreadState(waitQueue.waitQueue.get(maxWaitTimeIndex)).getPriority() != priorityMaximum) {
+					getThreadState(waitQueue.waitQueue.get(maxWaitTimeIndex)).setPriority(getThreadState(thread).getPriority());
+	 			}
 			}
-			
-			
-			
-			/*
-			 * Return thread with most tickets
-			 * 
-			 * int max = 0; int index = 0; for (int i = 0; i < waitQueue.size(); i++) { if
-			 * (max < getThreadState(waitQueue.get(i)).priority ) { max =
-			 * getThreadState(waitQueue.get(i)).priority; index = i; } }
-			 * 
-			 * return (KThread) waitQueue.get(index);
-			 */
-
-			// Case 2: no priority donation
-			/*
-			 * for (int i = 0; i < waitQueue.size(); i++) { int ticketCount =
-			 * getThreadState(waitQueue.get(i)).getPriority(); ticketSum[i] = ticketCount; }
-			 */
-
-			// Return the thread with the highest effective priority
-			// return (KThread) waitQueue.removeFirst();
-
-			return null;
 		}
-
-		/**
-		 * Return the next thread that <tt>nextThread()</tt> would return, without
-		 * modifying the state of this queue.
-		 *
-		 * @return the next thread that <tt>nextThread()</tt> would return.
-		 */
-
-		// Returns next thread without removing from queue
-		
-		// FIX
-		
-		protected ThreadState pickNextThread() {
-			// implement me
-			if (waitQueue.isEmpty())
-				return null;
-			
-			if (waitQueue.isEmpty())
-				return null;
-
-			if (owner != null) {
-				owner.noLongerOwn(this);
-			}
-			owner = null;
-
-
-			int[] ticketSum = new int[waitQueue.size()];
-
-			// Case 1: priority donation
-			if (transferPriority) {
-
-				// Calculate each threads ticket count, including the tickets from queues owned
-				// by the thread
-				for (int i = 0; i < waitQueue.size(); i++) {
-					int ownedQueueSize = getThreadState(waitQueue.get(i)).ownedQueues.size();
-					int ticketCount = getThreadState(waitQueue.get(i)).getPriority();
-					for (int j = 0; j < ownedQueueSize; j++) {
-						int ownedWaitingQueueSize = (((getThreadState(waitQueue.get(i))).ownedQueues).get(j)).waitQueue
-								.size();
-						int KticketSum = 0;
-						for (int k = 0; k < ownedWaitingQueueSize; k++) {
-							KticketSum += getThreadState(
-									(((getThreadState(waitQueue.get(i))).ownedQueues).get(j).waitQueue
-											.get(k))).priority;
-						}
-						ticketCount += KticketSum;
-					}
-					ticketSum[i] = ticketCount;
-				}
-
-				// Calculate the total number of tickets across all threads
-				int totalTickets = 0;
-				for (int i = 0; i < ticketSum.length; i++) {
-					totalTickets += ticketSum[i];
-				}
-
-				// Run the lottery
-				int randomNumber = (int) (Lib.random() * totalTickets);
-				for (int i = 0; i < waitQueue.size(); i++) {
-					randomNumber -= ticketSum[i];
-					if (randomNumber < 0) {
-						return getThreadState(waitQueue.get(i));
-					}
-				}
-				
-			// Case 2: no priority donation
-			} else {
-				
-				// Calculate each threads ticket count, WITHOUT ticket donation / priority donation
-				for (int i = 0; i < waitQueue.size(); i++) {
-					ticketSum[i] = getThreadState(waitQueue.get(i)).getPriority();
-				}
-				
-				// Calculate the total number of tickets across all threads
-				int totalTickets = 0;
-				for (int i = 0; i < ticketSum.length; i++) {
-					totalTickets += ticketSum[i];
-				}
-				
-				// Run the lottery
-				int randomNumber = (int) (Lib.random() * totalTickets);
-				for (int i = 0; i < waitQueue.size(); i++) {
-					randomNumber -= ticketSum[i];
-					if (randomNumber < 0) {
-						return getThreadState(waitQueue.get(i));
-					}
-				}
-				
-			}
-			
-			
-			
-			// Sort the waitQueue by Effective Priority
-			// sort();
-			// Return the thread with the highest Effective Priority
-			return null;
-		}
-
-		public void print() {
-			Lib.assertTrue(Machine.interrupt().disabled());
-			// implement me (if you want)
-
-			System.out.println("Print Called");
-
-		}
-
+		// Remove the thread from its associated PriorityQueue's waitQueue
+	    waitQueue.waitQueue.remove(thread);
+	    // Set this thread's associated PriorityQueue reference to null;
+	    threadQueue = null; 
 	}
 
-	// Thread State
-
-	protected class LotteryThreadState extends ThreadState {
-
-		// Variables
-		protected LinkedList<PriorityQueue> ownedQueues = new LinkedList<PriorityQueue>();
-
-		public LotteryThreadState(KThread thread) {
-			super(thread);
-		}
-
-		@Override
-		public void waitForAccess(PriorityQueue waitQueue) {
-			// implement me
-			Lib.assertTrue(Machine.interrupt().disabled());
-			// Add this thread to the PriorityQueue's waitQueue
-			waitQueue.waitQueue.add(thread);
-			// Set this ThreadState's associated PriorityQueue to the waitQueue
-			// that this thread was added to
-			threadQueue = waitQueue;
-		}
-
-		@Override
-		public void acquire(PriorityQueue waitQueue) {
-			Lib.assertTrue(Machine.interrupt().disabled());
-			// Remove the thread from its associated PriorityQueue's waitQueue
-			waitQueue.waitQueue.remove(thread);
-
-			// Now that the associated thread has acquired access, it now owns this priority
-			// queue (the one it previously waited on)
-			ownedQueues.add(waitQueue);
-
-			// Set this thread's associated PriorityQueue reference to null;
-			// This is the queue the thread is waiting on, now that it has acquired access
-			// the thread is no longer waiting, the thread now owns the resource,
-			// as is indicated in ownedQueues
-			threadQueue = null;
-		}
-
-		public void noLongerOwn(PriorityQueue waitQueue) {
-			ownedQueues.remove(waitQueue);
-		}
-
-	}
+	/** The thread with which this object is associated. */	   
+	protected KThread thread;
+	/** The priority of the associated thread. */
+	protected int priority;
+	
+	// The PriorityQueue that the thread has been added to.
+	// When the associated thread is added to a queue (when waitForAccess is called), 
+	// this ThreadQueue/PriorityQueue will be set to the queue that the thread was added to
+	// This object is used to calculate getEffectivePriority and ultimately to effect scheduling decisions
+	protected PriorityQueue threadQueue = null;
+	
+	// Added threadAge to indicate how long a thread has been waiting
+	public long waitStartTime = 0;
+	
+    }
 }
