@@ -32,6 +32,7 @@ public class UserProcess {
 		allProcesses.put(PID, this);
 		childProcesses = new HashSet<Integer>();
 		finished = new Semaphore(0);
+		descriptors = new OpenFile[16];
 		descriptorManager = new DescriptorManager();
 		descriptorManager.add(0, UserKernel.console.openForReading());
 		descriptorManager.add(1, UserKernel.console.openForWriting());
