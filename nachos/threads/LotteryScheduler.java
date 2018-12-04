@@ -442,6 +442,9 @@ public class LotteryScheduler extends PriorityScheduler {
 			Lib.assertTrue(Machine.interrupt().disabled());
 			// Add this thread to the PriorityQueue's waitQueue
 			waitQueue.waitQueue.add(thread);
+			
+			ownedQueues.remove(waitQueue);
+			
 			// Set this ThreadState's associated PriorityQueue to the waitQueue
 			// that this thread was added to
 			threadQueue = waitQueue;
