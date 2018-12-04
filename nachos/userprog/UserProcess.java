@@ -3,11 +3,8 @@ package nachos.userprog;
 import nachos.machine.*;
 import nachos.threads.*;
 import nachos.userprog.*;
-
 import java.util.Hashtable;
-
 import java.util.HashSet;
-
 import java.io.EOFException;
 
 /**
@@ -677,6 +674,7 @@ public class UserProcess {
      */
     public int handleSyscall(int syscall, int a0, int a1, int a2, int a3) {
 	switch (syscall) {
+			
 	case syscallHalt:
 	    return handleHalt();
 
@@ -695,18 +693,17 @@ public class UserProcess {
 	case syscallClose:
 		return handleClose(a0);
 
-
 	case syscallUnlink:
 		return handleUnlink(a0);
 
 	case syscallExit:
-			return handleExit(a0);
-		case syscallExec:
-			return handleExec(a0, a1, a2);
-		case syscallJoin:
-			return handleJoin(a0, a1);
-
-
+		return handleExit(a0);
+	
+	case syscallExec:
+		return handleExec(a0, a1, a2);
+			
+	case syscallJoin:
+		return handleJoin(a0, a1);
 
 	default:
 	    Lib.debug(dbgProcess, "Unknown syscall " + syscall);
@@ -926,7 +923,6 @@ public class UserProcess {
 
 	protected int PID;
 
-	/** The value which this process returns. */
 	protected int status;
 
 	protected Semaphore finished;
@@ -938,18 +934,17 @@ public class UserProcess {
 	protected boolean exitNormally = true;
 
 	protected static final int maxFileDescriptorNum = 16;
-
-	/** All of the opening files and how many processes refer to them */
+	
+	protected static final int maxFileNameLength = 256;
+	
+	protected static int processNumber = 0;
+	
 	protected static Hashtable<String, Integer> files = new Hashtable<String, Integer>();
-
-	/** The files are going to be deleted */
+	
 	protected static HashSet<String> deleted = new HashSet<String>();
 
-	protected static final int maxFileNameLength = 256;
-
-	protected static int processNumber = 0;
-
 	protected static Hashtable<Integer, UserProcess> allProcesses = new Hashtable<Integer, UserProcess>();
+	
 	protected static Hashtable<Integer, UserProcess> diedProcesses = new Hashtable<Integer, UserProcess>();
 
 }
