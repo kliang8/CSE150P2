@@ -204,7 +204,7 @@ public class PriorityScheduler extends Scheduler {
 		
 		// waitQueue (adapted from RoundRobinScheduler.java)
 		// This is the actual data structure that holds the associated threads
-		protected LinkedList<KThread> waitQueue = new LinkedList<KThread>();
+		public LinkedList<KThread> waitQueue = new LinkedList<KThread>();
     }
     
     /**
@@ -338,15 +338,15 @@ public class PriorityScheduler extends Scheduler {
 	}
 
 	/** The thread with which this object is associated. */	   
-	protected KThread thread;
+	public KThread thread;
 	/** The priority of the associated thread. */
-	protected int priority;
+	public int priority;
 	
 	// The PriorityQueue that the thread has been added to.
 	// When the associated thread is added to a queue (when waitForAccess is called), 
 	// this ThreadQueue/PriorityQueue will be set to the queue that the thread was added to
 	// This object is used to calculate getEffectivePriority and ultimately to effect scheduling decisions
-	protected PriorityQueue threadQueue = null;
+	public PriorityQueue threadQueue = null;
 	
 	// Added threadAge to indicate how long a thread has been waiting
 	public long waitStartTime = 0;

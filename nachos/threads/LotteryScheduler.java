@@ -394,9 +394,9 @@ public class LotteryScheduler extends PriorityScheduler {
 				return priority;
 			}	
 			// If the queue is empty or only has 1 thread, return the original priority value
-			if (threadQueue.waitQueue.isEmpty()) {
-				return priority;
-			}
+			//if (threadQueue.waitQueue.isEmpty()) {
+			//	return priority;
+			//}
 			
 			
 			int ticketSum = this.priority;
