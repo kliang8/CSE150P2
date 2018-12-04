@@ -143,7 +143,7 @@ public class LotteryScheduler extends PriorityScheduler {
 	}
 
 	// Lottery Queue
-	protected class LotteryQueue extends PriorityQueue {
+	public class LotteryQueue extends PriorityQueue {
 
 		// Variables
 		public LotteryThreadState owner = null;
@@ -459,6 +459,7 @@ public class LotteryScheduler extends PriorityScheduler {
 			// Now that the associated thread has acquired access, it now owns this priority
 			// queue (the one it previously waited on)
 			ownedQueues.add(waitQueue);
+			waitQueue.owner = this;
 
 			// Set this thread's associated PriorityQueue reference to null;
 			// This is the queue the thread is waiting on, now that it has acquired access
@@ -473,4 +474,3 @@ public class LotteryScheduler extends PriorityScheduler {
 
 	}
 }
-

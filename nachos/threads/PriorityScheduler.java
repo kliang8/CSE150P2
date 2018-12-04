@@ -1,6 +1,9 @@
+
 package nachos.threads;
 
 import nachos.machine.*;
+import nachos.threads.LotteryScheduler.LotteryThreadState;
+
 import java.util.*;
 
 /**
@@ -123,6 +126,10 @@ public class PriorityScheduler extends Scheduler {
      * A <tt>ThreadQueue</tt> that sorts threads by priority.
      */
     protected class PriorityQueue extends ThreadQueue {
+    	
+		public ThreadState owner = null;
+
+    	
 		PriorityQueue(boolean transferPriority) {
 		    this.transferPriority = transferPriority;
 		}
