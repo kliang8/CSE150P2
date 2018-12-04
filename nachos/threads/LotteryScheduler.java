@@ -285,13 +285,13 @@ public class LotteryScheduler extends PriorityScheduler {
 			if (waitQueue.isEmpty())
 				return null;
 			
-			if (waitQueue.isEmpty())
-				return null;
+			//if (waitQueue.isEmpty())
+			//	return null;
 
-			if (owner != null) {
-				owner.noLongerOwn(this);
-			}
-			owner = null;
+			//if (owner != null) {
+			//	owner.noLongerOwn(this);
+			//}
+			//owner = null;
 
 
 			int[] ticketSum = new int[waitQueue.size()];
