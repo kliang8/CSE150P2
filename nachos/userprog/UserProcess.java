@@ -152,8 +152,7 @@ public class UserProcess {
 		TranslationEntry entry = getTranslationEntry(firstVPN, false);
 
 		// Making sure we're not using an invalid entry
-		if (entry == null)
-			return 0;
+		if (entry == null) return 0;
 
 		// Setting our amount value based on length and diff based on the size of the pages and our first offset
 		int amount = Math.min(length, pageSize - firstOffset);
@@ -172,7 +171,7 @@ public class UserProcess {
 				return amount;
 			int len = Math.min(length - amount, pageSize);
 
-			// 
+			//
 			System.arraycopy(memory, Processor.makeAddress(entry.ppn, 0), data,
 					offset, len);
 			offset += len;
