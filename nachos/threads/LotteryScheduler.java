@@ -390,9 +390,9 @@ public class LotteryScheduler extends PriorityScheduler {
 		@Override
 		public int getEffectivePriority() {
 		    // implement me
-			if(threadQueue == null) {
-				return priority;
-			}	
+			//if(threadQueue == null) {
+			//	return priority;
+			//}	
 			// If the queue is empty or only has 1 thread, return the original priority value
 			//if (threadQueue.waitQueue.isEmpty()) {
 			//	return priority;
@@ -409,8 +409,6 @@ public class LotteryScheduler extends PriorityScheduler {
 							
 				}
 				ticketSum += KticketSum;
-				
-				
 				
 			}
 			priority = ticketSum;
