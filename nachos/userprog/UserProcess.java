@@ -183,8 +183,6 @@ public class UserProcess {
 	//
 	// return amount;
 
- 
-
     /**
      * Transfer all data from the specified array to this process's virtual
      * memory.
@@ -398,6 +396,7 @@ public class UserProcess {
 		return true;
 	}
 
+
     /**
      * Release any resources allocated by <tt>loadSections()</tt>.
      */
@@ -442,6 +441,42 @@ public class UserProcess {
 	Lib.assertNotReached("Machine.halt() did not halt machine!");
 	return 0;
     }
+    
+    private int handleOpenOrCreat(int vAddress, boolean isCreate)
+    {
+		String filename;
+		OpenFile file;
+
+		
+		filename = this.readVirtualMemoryString(vAddress, 255);
+		if ( filename == null )
+		{
+			Lib.debug(dbgProcess, "No filename from virtual memory");
+			return -1;
+		}
+
+
+		//boolean flag determines to create a new file or not
+		file = ThreadedKernel.fileSystem.open(filename, isCreate);
+		if(file == null)
+		{
+			Lib.debug(dbgProcess, "File could not be  opened/created");
+			return -1;
+		}
+		else
+		{
+			for(int i=2; i<descriptors.length; i++) 
+			{
+				if(descriptors[i] == null)
+				{
+					descriptors[i] = file;
+					return i;	//"Opening" the file by adding it to the file descriptor
+				}
+			}
+		}
+			Lib.debug(dbgProcess, "no more space in descriptors");
+			return -1;
+    }
 
     private int handleWrite(int handle, int buffer, int size) {
     	if(handle < 0 || handle > 15) {
@@ -474,6 +509,69 @@ public class UserProcess {
     		return -1;
     	}
     	return count;
+    }
+    
+    private int handleRead(int handle, int buffer, int size) 
+    {
+    	OpenFile file;
+    	
+    	if(handle < 0 || handle > 15) {
+    		Lib.debug(dbgProcess, "handle out of range");
+    		return -1;
+    	}
+    	if(size < 0) {
+    		Lib.debug(dbgProcess, "negative size");
+    		return -1;
+    	}
+    	else if(size == 0) {
+    		Lib.debug(dbgProcess, "size is zero");
+    		return 0;
+    	}
+		file = descriptors[handle];
+		
+		if(file == null)
+		{
+			Lib.debug(dbgProcess, "handleWrite:File doesn't exist in the descriptor table");
+			return -1;
+		}
+		
+		byte[] readArray = new byte[pageSize];
+		int unread = size;
+		int readArrByte = 0;
+		int readBufByte = 0;
+		int totalRead = 0;
+		//keep on reading til finished
+		while (unread > 0)
+		{
+			//Read as much as page size
+			if(unread > pageSize)
+				readArrByte = file.read(readArray, 0, pageSize);
+			else
+				readArrByte = file.read(readArray, 0, unread);
+			
+			if(readArrByte == -1)
+			{
+				Lib.debug(dbgProcess, "reading file error");
+				return -1;
+			}
+			
+			//move readArray to buffer
+			readBufByte = writeVirtualMemory(buffer, readArray, 0, readArrByte);
+			
+			//If the two end byte results are different
+			if (readArrByte != readBufByte)
+			{
+				Lib.debug(dbgProcess, "the read didn't fully complete");
+				return -1;
+			}
+			
+			//Shift buffer
+			buffer += readBufByte;
+			totalRead += readBufByte;
+			unread -= readBufByte;
+		}
+		
+		return totalRead; 
     }
 
     private int handleClose(int handle){
@@ -525,6 +623,7 @@ public class UserProcess {
 
 	}
 
+
     private static final int
         syscallHalt = 0,
 	syscallExit = 1,
@@ -569,12 +668,22 @@ public class UserProcess {
 	switch (syscall) {
 	case syscallHalt:
 	    return handleHalt();
+	    
+	case syscallCreate:
+		return handleOpenOrCreat(a0, true);
+		
+	case syscallOpen:
+		return handleOpenOrCreat(a0, false);
 
 	case syscallWrite:
 		return handleWrite(a0, a1, a2);
+		
+	case syscallRead:
+		return handleRead(a0, a1, a2);
 
 	case syscallClose:
 		return handleClose(a0);
+		
 
 	case syscallUnlink:
 		return handleUnlink(a0);
@@ -825,7 +934,6 @@ public class UserProcess {
 	/** The files are going to be deleted */
 	protected static HashSet<String> deleted = new HashSet<String>();
 
-	
 	protected static final int maxFileNameLength = 256;
 
 	protected static int processNumber = 0;
