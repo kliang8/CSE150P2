@@ -134,17 +134,13 @@ public class UserProcess {
      */
 	public int readVirtualMemory(int vaddr, byte[] data, int offset, int length) {
 		// Read from the virtual memory address to the data
-		Lib.assertTrue(offset >= 0 && length >= 0
-				&& offset + length <= data.length);
+		Lib.assertTrue(offset >= 0 && length >= 0 && offset + length <= data.length);
 		// Offset and length must be positive, offset + length <= total data length
 		// Get physical array
 		byte[] memory = Machine.processor().getMemory();
 
 		// Initializing our first and last page number as well as the first offset from the virtual address
-		int firstVPN = Processor.pageFromAddress(vaddr), firstOffset = Processor
-				.offsetFromAddress(vaddr), lastVPN = Processor
-				.pageFromAddress(vaddr + length);
-
+		int firstVPN = Processor.pageFromAddress(vaddr), firstOffset = Processor.offsetFromAddress(vaddr), lastVPN = Processor.pageFromAddress(vaddr + length);
 
 		TranslationEntry entry = getTranslationEntry(firstVPN, false);
 
@@ -154,23 +150,20 @@ public class UserProcess {
 		// Setting our amount value based on length and diff based on the size of the pages and our first offset
 		int amount = Math.min(length, pageSize - firstOffset);
 
-		// Copying the data from Virtual Memory onto the array
+		// Copying the data from Virtual Memory onto the array and progressing the offset
 		System.arraycopy(memory, Processor.makeAddress(entry.ppn, firstOffset),data, offset, amount);
-
-		// Moving our offset
 		offset += amount;
 
 		for (int i = firstVPN + 1; i <= lastVPN; i++) {
-			entry = getTranslationEntry(i, false);
-
 			// Returning the amount if we cant get an entry
-			if (entry == null)
-				return amount;
-			int len = Math.min(length - amount, pageSize);
+			entry = getTranslationEntry(i, false);
+			if (entry == null) return amount;
 
-			//
-			System.arraycopy(memory, Processor.makeAddress(entry.ppn, 0), data,
-					offset, len);
+			// Copying more of the data onto the arraya and progressing our offset and the amount of data read
+			int len = Math.min(length - amount, pageSize);
+			System.arraycopy(memory, Processor.makeAddress(entry.ppn, 0), data, offset, len);
+
+			// Progressing the offset and ammount copied
 			offset += len;
 			amount += len;
 		}
@@ -226,27 +219,26 @@ public class UserProcess {
 		// Get physical array
 		byte[] memory = Machine.processor().getMemory();
 
-		int firstVPN = Processor.pageFromAddress(vaddr), firstOffset = Processor
-				.offsetFromAddress(vaddr), lastVPN = Processor
-				.pageFromAddress(vaddr + length);
+		int firstVPN = Processor.pageFromAddress(vaddr), firstOffset = Processor.offsetFromAddress(vaddr), lastVPN = Processor.pageFromAddress(vaddr + length);
 
 		TranslationEntry entry = getTranslationEntry(firstVPN, true);
 
-		if (entry == null)
-			return 0;
+		// Making sure we're not using an invalid entry
+		if (entry == null) return 0;
 
 		int amount = Math.min(length, pageSize - firstOffset);
-		System.arraycopy(data, offset, memory, Processor.makeAddress(entry.ppn,
-				firstOffset), amount);
+
+		// Copying the data to Virtual Memory from the array and progressing the offset
+		System.arraycopy(data, offset, memory, Processor.makeAddress(entry.ppn, firstOffset), amount);	
 		offset += amount;
 
 		for (int i = firstVPN + 1; i <= lastVPN; i++) {
 			entry = getTranslationEntry(i, true);
-			if (entry == null)
-				return amount;
+			if (entry == null) return amount;
+
 			int len = Math.min(length - amount, pageSize);
-			System.arraycopy(data, offset, memory, Processor.makeAddress(
-					entry.ppn, 0), len);
+			System.arraycopy(data, offset, memory, Processor.makeAddress(entry.ppn, 0), len);
+
 			offset += len;
 			amount += len;
 		}
@@ -259,10 +251,14 @@ public class UserProcess {
 		if (vpn < 0 || vpn >= numPages)
 			return null;
 		TranslationEntry result = pageTable[vpn];
+		// Making sure our result isn't null
 		if (result == null)
 			return null;
+		// Have to do separate if to avoid us checking a result set to Null
+		// Making sure this isn't a readOnly and we are trying to write
 		if (result.readOnly && isWrite)
 			return null;
+
 		result.used = true;
 		if (isWrite)
 			result.dirty = true;
@@ -674,7 +670,7 @@ public class UserProcess {
      */
     public int handleSyscall(int syscall, int a0, int a1, int a2, int a3) {
 	switch (syscall) {
-			
+
 	case syscallHalt:
 	    return handleHalt();
 
@@ -698,10 +694,10 @@ public class UserProcess {
 
 	case syscallExit:
 		return handleExit(a0);
-	
+
 	case syscallExec:
 		return handleExec(a0, a1, a2);
-			
+
 	case syscallJoin:
 		return handleJoin(a0, a1);
 
@@ -934,17 +930,17 @@ public class UserProcess {
 	protected boolean exitNormally = true;
 
 	protected static final int maxFileDescriptorNum = 16;
-	
+
 	protected static final int maxFileNameLength = 256;
-	
+
 	protected static int processNumber = 0;
-	
+
 	protected static Hashtable<String, Integer> files = new Hashtable<String, Integer>();
-	
+
 	protected static HashSet<String> deleted = new HashSet<String>();
 
 	protected static Hashtable<Integer, UserProcess> allProcesses = new Hashtable<Integer, UserProcess>();
-	
+
 	protected static Hashtable<Integer, UserProcess> diedProcesses = new Hashtable<Integer, UserProcess>();
 
 }
