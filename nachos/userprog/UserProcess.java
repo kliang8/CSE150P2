@@ -30,9 +30,11 @@ public class UserProcess {
 		childProcesses = new HashSet<Integer>();
 		finished = new Semaphore(0);
 		descriptors = new OpenFile[16];
-		descriptorManager = new DescriptorManager();
-		descriptorManager.add(0, UserKernel.console.openForReading());
-		descriptorManager.add(1, UserKernel.console.openForWriting());
+		descriptors[0] = UserKernel.console.openForReading();
+		descriptors[1] = UserKernel.console.openForWriting();
+		//descriptorManager = new DescriptorManager();
+		//descriptorManager.add(0, UserKernel.console.openForReading());
+		//descriptorManager.add(1, UserKernel.console.openForWriting());
 	}
     /**
      * Allocate and return a new process of the correct class. The class name
@@ -61,6 +63,7 @@ public class UserProcess {
 
 	return true;
     }
+	
 
     /**
      * Save the state of this process in preparation for a context switch.
@@ -787,7 +790,15 @@ public class UserProcess {
 		this.status = status;
 
 		for (int i = 2; i < maxFileDescriptorNum; i++)
-			descriptorManager.close(i);
+		{
+			if (descriptors[i] != null)
+			{
+				OpenFile file = descriptors[i];
+				descriptors[i] = null;
+				file.close();
+			}
+		}
+
 		// Free memory
 		unloadSections();
 
@@ -925,7 +936,7 @@ public class UserProcess {
 
 	protected HashSet<Integer> childProcesses;
 
-	protected DescriptorManager descriptorManager;
+	//protected DescriptorManager descriptorManager;
 
 	protected boolean exitNormally = true;
 
